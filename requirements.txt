@@ -1,0 +1,5 @@
+streamlit==1.45.1
+pandas
+numpy
+scikit-learn  # If you used scikit-learn for your model
+joblib
