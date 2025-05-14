@@ -1,5 +1,5 @@
-streamlit
-scikit-learn==1.6.1
+streamlit==1.45.1
 pandas
-numpy==1.26.4
+numpy
+scikit-learn  # If you used scikit-learn for your model
 joblib
