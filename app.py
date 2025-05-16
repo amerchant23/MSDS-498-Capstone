@@ -3,6 +3,16 @@ import pandas as pd
 import numpy as np
 import re
 import joblib
+import spacy  # Import spaCy
+
+# Load spaCy model (download if needed)
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    st.warning("Downloading spaCy model (en_core_web_sm)...This may take a few minutes.")
+    from spacy.cli import download
+    download("en_core_web_sm")
+    nlp = spacy.load("en_core_web_sm")
 
 # Breed lists for Dogs and Cats
 dog_breeds = [
@@ -76,16 +86,87 @@ state_options_list = ['', 'Johor', 'Kedah', 'Kelantan', 'Kuala Lumpur', 'Labuan'
                       'Sabah', 'Sarawak', 'Selangor', 'Terengganu']
 
 # Utility functions
-def select_description(x):
-    return x['Description']
-
 def clean_description(text):
     text = re.sub(r"<.*?>", "", str(text))  # Remove HTML
     text = text.lower()
     text = re.sub(r"[^a-zA-Z0-9\\s]", "", text)
     return text
 
-def predict_adoption_speed(pet_info: dict, description: str, pipeline, training_columns: list) -> int:
+def analyze_description(text):
+    """
+    Analyzes the description text using spaCy to extract keywords and sentiment.
+    Args:
+        text (str): The pet description text.
+    Returns:
+        dict: A dictionary containing the analysis results:
+            - keywords (list): A list of important keywords.
+            - sentiment (float): A sentiment score (-1 to 1).
+    """
+    doc = nlp(text)
+    keywords = [
+        token.text
+        for token in doc
+        if token.is_alpha and not token.is_stop and token.pos_ in {"NOUN", "ADJ"}
+    ]
+    sentiment = doc.sentiment
+    return {"keywords": keywords, "sentiment": sentiment}
+
+
+def generate_suggestions(pet_info, description, analysis_results):
+    """
+    Generates suggestions for improving the pet description.
+    Args:
+        pet_info (dict): A dictionary containing the pet's features.
+        description (str): The original pet description.
+        analysis_results (dict): The results from the analyze_description function.
+    Returns:
+        list: A list of suggestion strings.
+    """
+    suggestions = []
+    keywords = analysis_results["keywords"]
+    sentiment = analysis_results["sentiment"]
+
+    # Suggestion for positive keywords
+    positive_keywords = ["friendly", "playful", "loving", "gentle", "loyal"]
+    missing_positive_keywords = [
+        keyword for keyword in positive_keywords if keyword not in keywords
+    ]
+    if missing_positive_keywords:
+        suggestions.append(
+            f"Consider adding positive keywords like: {', '.join(missing_positive_keywords)}"
+        )
+
+    # Suggestion for sentiment
+    if sentiment < 0.2:
+        suggestions.append(
+            "The description could be more positive.  Try to use more enthusiastic language."
+        )
+
+    # Suggestion based on pet features.
+    if pet_info["Type"] == "Dog":
+        if "good with kids" not in description.lower():
+            suggestions.append("If the dog is good with children, mention 'good with kids'.")
+        if "loves walks" not in description.lower():
+            suggestions.append("If the dog enjoys walks, mention 'loves walks'.")
+    elif pet_info["Type"] == "Cat":
+        if "affectionate" not in description.lower():
+            suggestions.append("If the cat is affectionate, mention 'affectionate'.")
+        if "clean" not in description.lower():
+            suggestions.append("Cats are typically clean, you can mention that.")
+
+     # Suggestion for breed
+    if pet_info["MainBreed"]:
+        suggestions.append(f"Highlight the positive traits of a {pet_info['MainBreed']}.")
+
+    # Suggestion for age.
+    if pet_info["Age"] < 6:
+        suggestions.append("Emphasize that this young pet is playful and energetic.")
+    elif pet_info["Age"] > 72:
+        suggestions.append("Emphasize that this senior pet is calm and loving.")
+    return suggestions
+
+
+def predict_adoption_speed(pet_info: dict, description: str, pipeline, training_columns: list) -> tuple:
     input_df = pd.DataFrame([pet_info])
     input_df["Description"] = clean_description(description)
 
@@ -103,7 +184,20 @@ def predict_adoption_speed(pet_info: dict, description: str, pipeline, training_
         if col in input_df.columns:
             input_df[col] = input_df[col].astype(str)
 
-    return pipeline.predict(input_df)[0]
+    try:
+        prediction = pipeline.predict(input_df)[0]
+    except Exception as e:
+        st.error(f"Error during prediction: {e}")
+        return None, []  # Return None and empty list in case of error
+
+    if prediction in [2, 3, 4]:
+        analysis_results = analyze_description(description)
+        suggestions = generate_suggestions(pet_info, description, analysis_results)
+    else:
+        suggestions = []
+    return prediction, suggestions
+
+
 
 # Load model and labels
 try:
@@ -122,7 +216,6 @@ except Exception as e:
 
 # --- App UI ---
 st.set_page_config(page_title="🐾 Pet Adoption Predictor", layout="wide")
-
 st.title("🐶 Pet Adoption Speed Predictor")
 st.write("Predict how quickly a pet may be adopted based on its characteristics and description.")
 
@@ -188,7 +281,7 @@ with col2:
             maturity_mapping = {"Small": 1, "Medium": 2, "Large": 3, "Extra Large": 4}
             fur_mapping = {"Short": 1, "Medium": 2, "Long": 3}
             yes_no_not_sure_mapping = {"Yes": 1, "No": 2, "Not Sure": 3}
-            health_mapping = {"Healthy": 1, "Minor Injury": 2, "Serious Injury": 3} # You might want to add "Not Specified": 0
+            health_mapping = {"Healthy": 1, "Minor Injury": 2, "Serious Injury": 3}
 
             pet_info = {
                 "Age": age,
@@ -198,12 +291,12 @@ with col2:
                 "PhotoAmt": photo_amt,
                 "Type": type,
                 "Gender": gender,
-                "MaturitySize": maturity_mapping.get(maturity_size, np.nan), # Handle potential missing keys
+                "MaturitySize": maturity_mapping.get(maturity_size, np.nan),
                 "FurLength": fur_mapping.get(fur_length, np.nan),
                 "Vaccinated": yes_no_not_sure_mapping.get(vaccinated, np.nan),
                 "Dewormed": yes_no_not_sure_mapping.get(dewormed, np.nan),
                 "Sterilized": yes_no_not_sure_mapping.get(sterilized, np.nan),
-                "Health": health_mapping.get(health, np.nan), # Consider adding "Not Specified" to dropdown and mapping
+                "Health": health_mapping.get(health, np.nan),
                 "StateName": state_name,
                 "Breed1Type": breed1_type,
                 "Breed2Type": breed2_type,
@@ -216,8 +309,7 @@ with col2:
                 "IsMixBreed": 1 if second_breed else 0,
                 "DescriptionLength": len(description)
             }
-
-            prediction = predict_adoption_speed(pet_info, description, pipeline_rf, saved_columns)
+            prediction, suggestions = predict_adoption_speed(pet_info, description, pipeline_rf, saved_columns)
 
             adoption_labels = {
                 0: ("Estimated to be adopted Same Day", "🟢"),
@@ -229,3 +321,8 @@ with col2:
 
             label, emoji = adoption_labels.get(prediction, ("Unknown", "❓"))
             st.success(f"{emoji} **Predicted Adoption Speed:** {label}")
+
+            if suggestions:
+                st.warning("Here are some suggestions to improve the pet's description:")
+                for suggestion in suggestions:
+                    st.markdown(f"- {suggestion}")
