@@ -12,16 +12,6 @@ from sklearn.metrics import classification_report, confusion_matrix
 import sklearn
 import numpy as np
 import joblib
-import spacy  # Import spaCy
-
-# Load spaCy model (download if needed: python -m spacy download en_core_web_sm)
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    print("Downloading spaCy model (en_core_web_sm)...")
-    from spacy.cli import download
-    download("en_core_web_sm")
-    nlp = spacy.load("en_core_web_sm")
 
 print("Scikit-learn version during training:", sklearn.__version__)
 print("NumPy version during training:", np.__version__)
@@ -158,38 +148,31 @@ print(classification_report(y_test, y_pred_rf))
 print(confusion_matrix(y_test, y_pred_rf))
 
 
-# --- Description Analysis Functions ---
+# --- Description Analysis Functions (WITHOUT spaCy) ---
 
 def analyze_description(text):
     """
-    Analyzes the description text using spaCy to extract keywords and sentiment.
+    A basic analysis of the description text to extract simple keywords.
+    This version does not use spaCy.
 
     Args:
         text (str): The pet description text.
 
     Returns:
         dict: A dictionary containing the analysis results:
-            - keywords (list): A list of important keywords.
-            - sentiment (float): A sentiment score (-1 to 1).
+            - keywords (list): A list of simple keywords (alphanumeric words).
+            - sentiment (float): A placeholder sentiment score (always 0).
     """
-    doc = nlp(text)
-
-    # Keyword extraction (simplified - can be improved)
-    keywords = [
-        token.text
-        for token in doc
-        if token.is_alpha and not token.is_stop and token.pos_ in {"NOUN", "ADJ"}
-    ]
-
-    # Sentiment analysis
-    sentiment = doc.sentiment  # Simplified sentiment, requires a trained pipeline.
-
-    return {"keywords": keywords, "sentiment": sentiment}
+    keywords = re.findall(r"[a-zA-Z0-9]+", text.lower())
+    # Basic filtering of very common short words (can be expanded)
+    stop_words = set(['the', 'a', 'is', 'in', 'it', 'and', 'of', 'to', 'be', 'with', 'for'])
+    filtered_keywords = [word for word in keywords if word not in stop_words and len(word) > 2]
+    return {"keywords": filtered_keywords, "sentiment": 0.0}  # Placeholder sentiment
 
 
 def generate_suggestions(pet_info, description, analysis_results):
     """
-    Generates suggestions for improving the pet description.
+    Generates suggestions for improving the pet description based on basic keyword analysis.
 
     Args:
         pet_info (dict): A dictionary containing the pet's features.
@@ -201,22 +184,16 @@ def generate_suggestions(pet_info, description, analysis_results):
     """
     suggestions = []
     keywords = analysis_results["keywords"]
-    sentiment = analysis_results["sentiment"]
+    sentiment = analysis_results["sentiment"]  # Not really used in this version
 
-    # Suggestion for positive keywords
-    positive_keywords = ["friendly", "playful", "loving", "gentle", "loyal"]
+    # Suggestion for positive keywords (simplified)
+    positive_keywords = ["friendly", "playful", "loving", "gentle", "loyal", "sweet", "happy"]
     missing_positive_keywords = [
         keyword for keyword in positive_keywords if keyword not in keywords
     ]
     if missing_positive_keywords:
         suggestions.append(
-            f"Consider adding positive keywords like: {', '.join(missing_positive_keywords)}"
-        )
-
-    # Suggestion for sentiment
-    if sentiment < 0.2:  # Arbitrary threshold for negative/neutral sentiment
-        suggestions.append(
-            "The description could be more positive.  Try to use more enthusiastic language."
+            f"Consider adding positive words like: {', '.join(missing_positive_keywords)}"
         )
 
     # Suggestion based on pet features.
@@ -233,7 +210,9 @@ def generate_suggestions(pet_info, description, analysis_results):
 
     # Suggestion for breed
     if pet_info["MainBreed"]:
-        suggestions.append(f"Highlight the positive traits of a {pet_info['MainBreed']}.")
+        breed_lower = pet_info["MainBreed"].lower()
+        if breed_lower not in description.lower():
+            suggestions.append(f"Consider highlighting the breed: {pet_info['MainBreed']}.")
 
     # Suggestion for age.
     if pet_info["Age"] < 6:
@@ -246,7 +225,7 @@ def generate_suggestions(pet_info, description, analysis_results):
 
 def predict_adoption_speed(pet_info: dict, description: str, pipeline: Pipeline, training_columns: list) -> tuple:
     """
-    Predicts the adoption speed and generates description suggestions.
+    Predicts the adoption speed and generates description suggestions (without spaCy).
 
     Args:
         pet_info (dict): A dictionary containing the pet's features.
@@ -289,7 +268,7 @@ def predict_adoption_speed(pet_info: dict, description: str, pipeline: Pipeline,
         raise
     # Only generate suggestions if the predicted speed is 2, 3, or 4
     if prediction in [2, 3, 4]:
-        analysis_results = analyze_description(description)  # Analyze description.
+        analysis_results = analyze_description(description)  # Analyze description (without spaCy).
         suggestions = generate_suggestions(pet_info, description, analysis_results) # Generate suggestions.
     else:
         suggestions = []
