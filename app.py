@@ -3,8 +3,15 @@ import pandas as pd
 import numpy as np
 import re
 import joblib
+import requests
+import os
 
-# Utility functions
+# --- Configuration ---
+MODEL_URL = "https://drive.google.com/uc?export=download&id=1k-PsQJTdXjuCVQSStvdua04OkEmb2hr4"
+MODEL_FILENAME = "pipeline_rf.pkl"
+LOCAL_MODEL_PATH = MODEL_FILENAME
+
+# Utility functions (clean_description, analyze_description, generate_suggestions, predict_adoption_speed) remain the same
 def clean_description(text):
     text = re.sub(r"<.*?>", "", str(text))  # Remove HTML
     text = text.lower()
@@ -12,42 +19,16 @@ def clean_description(text):
     return text
 
 def analyze_description(text):
-    """
-    A basic analysis of the description text to extract simple keywords.
-    This version does not use spaCy.
-
-    Args:
-        text (str): The pet description text.
-
-    Returns:
-        dict: A dictionary containing the analysis results:
-            - keywords (list): A list of simple keywords (alphanumeric words).
-            - sentiment (float): A placeholder sentiment score (always 0).
-    """
     keywords = re.findall(r"[a-zA-Z0-9]+", text.lower())
-    # Basic filtering of very common short words (can be expanded)
     stop_words = set(['the', 'a', 'is', 'in', 'it', 'and', 'of', 'to', 'be', 'with', 'for'])
     filtered_keywords = [word for word in keywords if word not in stop_words and len(word) > 2]
-    return {"keywords": filtered_keywords, "sentiment": 0.0}  # Placeholder sentiment
-
+    return {"keywords": filtered_keywords, "sentiment": 0.0}
 
 def generate_suggestions(pet_info, description, analysis_results):
-    """
-    Generates suggestions for improving the pet description based on basic keyword analysis.
-
-    Args:
-        pet_info (dict): A dictionary containing the pet's features.
-        description (str): The original pet description.
-        analysis_results (dict): The results from the analyze_description function.
-
-    Returns:
-        list: A list of suggestion strings.
-    """
     suggestions = []
     keywords = analysis_results["keywords"]
-    sentiment = analysis_results["sentiment"]  # Not really used in this version
+    sentiment = analysis_results["sentiment"]
 
-    # Suggestion for positive keywords (simplified)
     positive_keywords = ["friendly", "playful", "loving", "gentle", "loyal", "sweet", "happy"]
     missing_positive_keywords = [
         keyword for keyword in positive_keywords if keyword not in keywords
@@ -57,7 +38,6 @@ def generate_suggestions(pet_info, description, analysis_results):
             f"Consider adding positive words like: {', '.join(missing_positive_keywords)}"
         )
 
-    # Suggestion based on pet features.
     if pet_info["Type"] == "Dog":
         if "good with kids" not in description.lower():
             suggestions.append("If the dog is good with children, mention 'good with kids'.")
@@ -69,20 +49,17 @@ def generate_suggestions(pet_info, description, analysis_results):
         if "clean" not in description.lower():
             suggestions.append("Cats are typically clean, you can mention that.")
 
-    # Suggestion for breed
     if pet_info["MainBreed"]:
         breed_lower = pet_info["MainBreed"].lower()
         if breed_lower not in description.lower():
             suggestions.append(f"Consider highlighting the breed: {pet_info['MainBreed']}.")
 
-    # Suggestion for age.
     if pet_info["Age"] < 6:
         suggestions.append("Emphasize that this young pet is playful and energetic.")
     elif pet_info["Age"] > 72:
         suggestions.append("Emphasize that this senior pet is calm and loving.")
 
     return suggestions
-
 
 def predict_adoption_speed(pet_info: dict, description: str, pipeline, training_columns: list) -> tuple:
     input_df = pd.DataFrame([pet_info])
@@ -106,7 +83,7 @@ def predict_adoption_speed(pet_info: dict, description: str, pipeline, training_
         prediction = pipeline.predict(input_df)[0]
     except Exception as e:
         st.error(f"Error during prediction: {e}")
-        return None, []  # Return None and empty list in case of error
+        return None, []
 
     if prediction in [2, 3, 4]:
         analysis_results = analyze_description(description)
@@ -115,6 +92,37 @@ def predict_adoption_speed(pet_info: dict, description: str, pipeline, training_
         suggestions = []
     return prediction, suggestions
 
+@st.cache_resource
+def load_model():
+    if not os.path.exists(LOCAL_MODEL_PATH):
+        st.info(f"Downloading model from {MODEL_URL}...")
+        try:
+            response = requests.get(MODEL_URL, stream=True)
+            response.raise_for_status()  # Raise an exception for bad status codes
+            with open(LOCAL_MODEL_PATH, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            st.success("Model downloaded successfully!")
+        except requests.exceptions.RequestException as e:
+            st.error(f"Error downloading model: {e}")
+            return None
+        except Exception as e:
+            st.error(f"An unexpected error occurred during download: {e}")
+            return None
+
+    try:
+        pipeline_rf, saved_columns = joblib.load(LOCAL_MODEL_PATH)
+        return pipeline_rf, saved_columns
+    except Exception as e:
+        st.error(f"Error loading the model from {LOCAL_MODEL_PATH}: {e}")
+        return None, None
+
+# --- Load the model ---
+model_tuple = load_model()
+if model_tuple:
+    pipeline_rf, saved_columns = model_tuple
+else:
+    st.stop()
 
 # Breed lists for Dogs and Cats
 dog_breeds = [
@@ -186,21 +194,6 @@ color_options_list = ['', 'Black', 'Brown', 'Golden', 'Yellow', 'Cream', 'Gray',
 state_options_list = ['', 'Johor', 'Kedah', 'Kelantan', 'Kuala Lumpur', 'Labuan', 'Melaka',
                       'Negeri Sembilan', 'Pahang', 'Perak', 'Perlis', 'Pulau Pinang',
                       'Sabah', 'Sarawak', 'Selangor', 'Terengganu']
-
-# Load model and labels
-try:
-    pipeline_rf, saved_columns = joblib.load('pipeline_rf.pkl')
-except:
-    st.error("Model file not found.")
-    st.stop()
-
-try:
-    breed_labels_df = pd.read_csv("breed_labels.csv")
-    color_labels_df = pd.read_csv("color_labels.csv")
-    state_labels_df = pd.read_csv("state_labels.csv")
-except Exception as e:
-    st.error(f"Error loading label files: {e}")
-    st.stop()
 
 # --- App UI ---
 st.set_page_config(page_title="🐾 Pet Adoption Predictor", layout="wide")
