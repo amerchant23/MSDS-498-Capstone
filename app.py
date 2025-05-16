@@ -32,8 +32,8 @@ import streamlit as st
 st.set_page_config(page_title="🐾 Pet Adoption Predictor", layout="wide")
 
 # --- Configuration ---
-MODEL_URL = "https://drive.google.com/file/d/1KKUpQKplPDhx7o3Fs4WQOxUOMBWlihzA/view?usp=drive_link"
-MODEL_FILENAME = "pipeline_rf_protocol4.pkl"  # Updated model filename
+MODEL_URL = "https://drive.google.com/uc?export=download&id=1KKUpQKplPDhx7o3Fs4WQOxUOMBWlihzA"
+MODEL_FILENAME = "pipeline_rf_protocol4.pkl"
 LOCAL_MODEL_PATH = MODEL_FILENAME
 
 # Utility functions (including select_description)
