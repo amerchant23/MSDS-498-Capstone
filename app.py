@@ -6,6 +6,8 @@ import joblib
 import requests
 import os
 
+st.set_page_config(page_title="🐾 Pet Adoption Predictor", layout="wide")
+
 # --- Configuration ---
 MODEL_URL = "https://drive.google.com/uc?export=download&id=1k-PsQJTdXjuCVQSStvdua04OkEmb2hr4"
 MODEL_FILENAME = "pipeline_rf.pkl"
@@ -196,7 +198,7 @@ state_options_list = ['', 'Johor', 'Kedah', 'Kelantan', 'Kuala Lumpur', 'Labuan'
                       'Sabah', 'Sarawak', 'Selangor', 'Terengganu']
 
 # --- App UI ---
-st.set_page_config(page_title="🐾 Pet Adoption Predictor", layout="wide")
+
 st.title("🐶 Pet Adoption Speed Predictor")
 st.write("Predict how quickly a pet may be adopted based on its characteristics and description.")
 
