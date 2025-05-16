@@ -1,8 +1,3 @@
-!pip install scikit-learn==1.6.1
-!pip install pandas==2.2.2
-!pip install numpy==2.0.2
-!pip install joblib==1.5.0
-
 import streamlit as st
 import pandas as pd
 import numpy as np
