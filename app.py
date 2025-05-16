@@ -1,3 +1,8 @@
+!pip install scikit-learn==1.6.1
+!pip install pandas==2.2.2
+!pip install numpy==2.0.2
+!pip install joblib==1.5.0
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -5,7 +10,8 @@ import re
 import joblib
 import requests
 import os
-import traceback  # Import the traceback module for detailed error logging
+import traceback
+import scikit-learn
 
 # --- MUST BE THE FIRST STREAMLIT COMMAND ---
 st.set_page_config(page_title="🐾 Pet Adoption Predictor", layout="wide")
