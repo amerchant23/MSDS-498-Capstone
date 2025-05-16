@@ -11,7 +11,7 @@ import traceback  # Import the traceback module for detailed error logging
 st.set_page_config(page_title="🐾 Pet Adoption Predictor", layout="wide")
 
 # --- Configuration ---
-MODEL_URL = "https://drive.google.com/file/d/1XXeCiKS1d0IdelnT2_U7WbEiFxytp4eJ/view?usp=sharing"
+MODEL_URL = "https://drive.google.com/file/d/1tQ005rGlwStOSGfu90n8acvB404st8RQ/view?usp=sharing"
 MODEL_FILENAME = "pipeline_rf.pkl"
 LOCAL_MODEL_PATH = MODEL_FILENAME
 
