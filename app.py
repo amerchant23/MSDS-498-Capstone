@@ -3,16 +3,118 @@ import pandas as pd
 import numpy as np
 import re
 import joblib
-import spacy  # Import spaCy
 
-# Load spaCy model (download if needed)
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    st.warning("Downloading spaCy model (en_core_web_sm)...This may take a few minutes.")
-    from spacy.cli import download
-    download("en_core_web_sm")
-    nlp = spacy.load("en_core_web_sm")
+# Utility functions
+def clean_description(text):
+    text = re.sub(r"<.*?>", "", str(text))  # Remove HTML
+    text = text.lower()
+    text = re.sub(r"[^a-zA-Z0-9\\s]", "", text)
+    return text
+
+def analyze_description(text):
+    """
+    A basic analysis of the description text to extract simple keywords.
+    This version does not use spaCy.
+
+    Args:
+        text (str): The pet description text.
+
+    Returns:
+        dict: A dictionary containing the analysis results:
+            - keywords (list): A list of simple keywords (alphanumeric words).
+            - sentiment (float): A placeholder sentiment score (always 0).
+    """
+    keywords = re.findall(r"[a-zA-Z0-9]+", text.lower())
+    # Basic filtering of very common short words (can be expanded)
+    stop_words = set(['the', 'a', 'is', 'in', 'it', 'and', 'of', 'to', 'be', 'with', 'for'])
+    filtered_keywords = [word for word in keywords if word not in stop_words and len(word) > 2]
+    return {"keywords": filtered_keywords, "sentiment": 0.0}  # Placeholder sentiment
+
+
+def generate_suggestions(pet_info, description, analysis_results):
+    """
+    Generates suggestions for improving the pet description based on basic keyword analysis.
+
+    Args:
+        pet_info (dict): A dictionary containing the pet's features.
+        description (str): The original pet description.
+        analysis_results (dict): The results from the analyze_description function.
+
+    Returns:
+        list: A list of suggestion strings.
+    """
+    suggestions = []
+    keywords = analysis_results["keywords"]
+    sentiment = analysis_results["sentiment"]  # Not really used in this version
+
+    # Suggestion for positive keywords (simplified)
+    positive_keywords = ["friendly", "playful", "loving", "gentle", "loyal", "sweet", "happy"]
+    missing_positive_keywords = [
+        keyword for keyword in positive_keywords if keyword not in keywords
+    ]
+    if missing_positive_keywords:
+        suggestions.append(
+            f"Consider adding positive words like: {', '.join(missing_positive_keywords)}"
+        )
+
+    # Suggestion based on pet features.
+    if pet_info["Type"] == "Dog":
+        if "good with kids" not in description.lower():
+            suggestions.append("If the dog is good with children, mention 'good with kids'.")
+        if "loves walks" not in description.lower():
+            suggestions.append("If the dog enjoys walks, mention 'loves walks'.")
+    elif pet_info["Type"] == "Cat":
+        if "affectionate" not in description.lower():
+            suggestions.append("If the cat is affectionate, mention 'affectionate'.")
+        if "clean" not in description.lower():
+            suggestions.append("Cats are typically clean, you can mention that.")
+
+    # Suggestion for breed
+    if pet_info["MainBreed"]:
+        breed_lower = pet_info["MainBreed"].lower()
+        if breed_lower not in description.lower():
+            suggestions.append(f"Consider highlighting the breed: {pet_info['MainBreed']}.")
+
+    # Suggestion for age.
+    if pet_info["Age"] < 6:
+        suggestions.append("Emphasize that this young pet is playful and energetic.")
+    elif pet_info["Age"] > 72:
+        suggestions.append("Emphasize that this senior pet is calm and loving.")
+
+    return suggestions
+
+
+def predict_adoption_speed(pet_info: dict, description: str, pipeline, training_columns: list) -> tuple:
+    input_df = pd.DataFrame([pet_info])
+    input_df["Description"] = clean_description(description)
+
+    for col in training_columns:
+        if col not in input_df.columns:
+            input_df[col] = np.nan
+
+    input_df = input_df[training_columns]
+
+    categorical_features = ['Type', 'Gender', 'MaturitySize', 'FurLength', 'Vaccinated',
+                            'Dewormed', 'Sterilized', 'Health', 'StateName', 'Breed1Type',
+                            'Breed2Type', 'MainBreed', 'SecondBreed', 'ColorName1',
+                            'ColorName2', 'ColorName3']
+    for col in categorical_features:
+        if col in input_df.columns:
+            input_df[col] = input_df[col].astype(str)
+
+    try:
+        prediction = pipeline.predict(input_df)[0]
+    except Exception as e:
+        st.error(f"Error during prediction: {e}")
+        return None, []  # Return None and empty list in case of error
+
+    if prediction in [2, 3, 4]:
+        analysis_results = analyze_description(description)
+        suggestions = generate_suggestions(pet_info, description, analysis_results)
+    else:
+        suggestions = []
+    return prediction, suggestions
+
 
 # Breed lists for Dogs and Cats
 dog_breeds = [
@@ -84,120 +186,6 @@ color_options_list = ['', 'Black', 'Brown', 'Golden', 'Yellow', 'Cream', 'Gray',
 state_options_list = ['', 'Johor', 'Kedah', 'Kelantan', 'Kuala Lumpur', 'Labuan', 'Melaka',
                       'Negeri Sembilan', 'Pahang', 'Perak', 'Perlis', 'Pulau Pinang',
                       'Sabah', 'Sarawak', 'Selangor', 'Terengganu']
-
-# Utility functions
-def clean_description(text):
-    text = re.sub(r"<.*?>", "", str(text))  # Remove HTML
-    text = text.lower()
-    text = re.sub(r"[^a-zA-Z0-9\\s]", "", text)
-    return text
-
-def analyze_description(text):
-    """
-    Analyzes the description text using spaCy to extract keywords and sentiment.
-    Args:
-        text (str): The pet description text.
-    Returns:
-        dict: A dictionary containing the analysis results:
-            - keywords (list): A list of important keywords.
-            - sentiment (float): A sentiment score (-1 to 1).
-    """
-    doc = nlp(text)
-    keywords = [
-        token.text
-        for token in doc
-        if token.is_alpha and not token.is_stop and token.pos_ in {"NOUN", "ADJ"}
-    ]
-    sentiment = doc.sentiment
-    return {"keywords": keywords, "sentiment": sentiment}
-
-
-def generate_suggestions(pet_info, description, analysis_results):
-    """
-    Generates suggestions for improving the pet description.
-    Args:
-        pet_info (dict): A dictionary containing the pet's features.
-        description (str): The original pet description.
-        analysis_results (dict): The results from the analyze_description function.
-    Returns:
-        list: A list of suggestion strings.
-    """
-    suggestions = []
-    keywords = analysis_results["keywords"]
-    sentiment = analysis_results["sentiment"]
-
-    # Suggestion for positive keywords
-    positive_keywords = ["friendly", "playful", "loving", "gentle", "loyal"]
-    missing_positive_keywords = [
-        keyword for keyword in positive_keywords if keyword not in keywords
-    ]
-    if missing_positive_keywords:
-        suggestions.append(
-            f"Consider adding positive keywords like: {', '.join(missing_positive_keywords)}"
-        )
-
-    # Suggestion for sentiment
-    if sentiment < 0.2:
-        suggestions.append(
-            "The description could be more positive.  Try to use more enthusiastic language."
-        )
-
-    # Suggestion based on pet features.
-    if pet_info["Type"] == "Dog":
-        if "good with kids" not in description.lower():
-            suggestions.append("If the dog is good with children, mention 'good with kids'.")
-        if "loves walks" not in description.lower():
-            suggestions.append("If the dog enjoys walks, mention 'loves walks'.")
-    elif pet_info["Type"] == "Cat":
-        if "affectionate" not in description.lower():
-            suggestions.append("If the cat is affectionate, mention 'affectionate'.")
-        if "clean" not in description.lower():
-            suggestions.append("Cats are typically clean, you can mention that.")
-
-     # Suggestion for breed
-    if pet_info["MainBreed"]:
-        suggestions.append(f"Highlight the positive traits of a {pet_info['MainBreed']}.")
-
-    # Suggestion for age.
-    if pet_info["Age"] < 6:
-        suggestions.append("Emphasize that this young pet is playful and energetic.")
-    elif pet_info["Age"] > 72:
-        suggestions.append("Emphasize that this senior pet is calm and loving.")
-    return suggestions
-
-
-def predict_adoption_speed(pet_info: dict, description: str, pipeline, training_columns: list) -> tuple:
-    input_df = pd.DataFrame([pet_info])
-    input_df["Description"] = clean_description(description)
-
-    for col in training_columns:
-        if col not in input_df.columns:
-            input_df[col] = np.nan
-
-    input_df = input_df[training_columns]
-
-    categorical_features = ['Type', 'Gender', 'MaturitySize', 'FurLength', 'Vaccinated',
-                            'Dewormed', 'Sterilized', 'Health', 'StateName', 'Breed1Type',
-                            'Breed2Type', 'MainBreed', 'SecondBreed', 'ColorName1',
-                            'ColorName2', 'ColorName3']
-    for col in categorical_features:
-        if col in input_df.columns:
-            input_df[col] = input_df[col].astype(str)
-
-    try:
-        prediction = pipeline.predict(input_df)[0]
-    except Exception as e:
-        st.error(f"Error during prediction: {e}")
-        return None, []  # Return None and empty list in case of error
-
-    if prediction in [2, 3, 4]:
-        analysis_results = analyze_description(description)
-        suggestions = generate_suggestions(pet_info, description, analysis_results)
-    else:
-        suggestions = []
-    return prediction, suggestions
-
-
 
 # Load model and labels
 try:
