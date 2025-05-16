@@ -131,7 +131,7 @@ with st.sidebar:
 
     st.subheader("🐾 Basic Info")
     age = st.number_input("Age (months)", 0, 240)
-    quantity = st.number_input("Quantity (Number of pets represented in profile", 1, 20)
+    quantity = st.number_input("Quantity (Pet Count in Profile)", 1, 20)
     fee = st.number_input("Adoption Fee ($)", 0, 1000)
     video_amt = st.number_input("Number of Videos", 0, 10)
     photo_amt = st.number_input("Number of Photos", 0, 20)
