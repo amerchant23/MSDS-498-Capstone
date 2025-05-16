@@ -1,6 +1,6 @@
 streamlit
 requests
-scikit-learn==1.5.3
-pandas==2.1.4
-joblib==1.3.2
-numpy>=1.25.0
+scikit-learn
+pandas
+joblib
+numpy
