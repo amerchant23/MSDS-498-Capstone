@@ -6,7 +6,7 @@ import joblib
 import requests
 import os
 import traceback
-import scikit-learn
+import sklearn
 
 # --- MUST BE THE FIRST STREAMLIT COMMAND ---
 st.set_page_config(page_title="🐾 Pet Adoption Predictor", layout="wide")
