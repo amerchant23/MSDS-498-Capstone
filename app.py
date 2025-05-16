@@ -5,7 +5,9 @@ import re
 import joblib
 import requests
 import os
+import traceback  # Import the traceback module for detailed error logging
 
+# --- MUST BE THE FIRST STREAMLIT COMMAND ---
 st.set_page_config(page_title="🐾 Pet Adoption Predictor", layout="wide")
 
 # --- Configuration ---
@@ -13,9 +15,9 @@ MODEL_URL = "https://drive.google.com/uc?export=download&id=1k-PsQJTdXjuCVQSStvd
 MODEL_FILENAME = "pipeline_rf.pkl"
 LOCAL_MODEL_PATH = MODEL_FILENAME
 
-# Utility functions (clean_description, analyze_description, generate_suggestions, predict_adoption_speed) remain the same
+# Utility functions (clean_description, analyze_description, generate_suggestions, predict_adoption_speed)
 def clean_description(text):
-    text = re.sub(r"<.*?>", "", str(text))  # Remove HTML
+    text = re.sub(r"<.*?>", "", str(text))
     text = text.lower()
     text = re.sub(r"[^a-zA-Z0-9\\s]", "", text)
     return text
@@ -30,7 +32,6 @@ def generate_suggestions(pet_info, description, analysis_results):
     suggestions = []
     keywords = analysis_results["keywords"]
     sentiment = analysis_results["sentiment"]
-
     positive_keywords = ["friendly", "playful", "loving", "gentle", "loyal", "sweet", "happy"]
     missing_positive_keywords = [
         keyword for keyword in positive_keywords if keyword not in keywords
@@ -39,7 +40,6 @@ def generate_suggestions(pet_info, description, analysis_results):
         suggestions.append(
             f"Consider adding positive words like: {', '.join(missing_positive_keywords)}"
         )
-
     if pet_info["Type"] == "Dog":
         if "good with kids" not in description.lower():
             suggestions.append("If the dog is good with children, mention 'good with kids'.")
@@ -50,28 +50,27 @@ def generate_suggestions(pet_info, description, analysis_results):
             suggestions.append("If the cat is affectionate, mention 'affectionate'.")
         if "clean" not in description.lower():
             suggestions.append("Cats are typically clean, you can mention that.")
-
     if pet_info["MainBreed"]:
         breed_lower = pet_info["MainBreed"].lower()
         if breed_lower not in description.lower():
             suggestions.append(f"Consider highlighting the breed: {pet_info['MainBreed']}.")
-
     if pet_info["Age"] < 6:
         suggestions.append("Emphasize that this young pet is playful and energetic.")
     elif pet_info["Age"] > 72:
         suggestions.append("Emphasize that this senior pet is calm and loving.")
-
     return suggestions
 
 def predict_adoption_speed(pet_info: dict, description: str, pipeline, training_columns: list) -> tuple:
     input_df = pd.DataFrame([pet_info])
     input_df["Description"] = clean_description(description)
 
+    if training_columns is None:
+        st.error("Error: training_columns is None. Please check model loading.")
+        return None, []
+
     for col in training_columns:
         if col not in input_df.columns:
             input_df[col] = np.nan
-
-    input_df = input_df[training_columns]
 
     categorical_features = ['Type', 'Gender', 'MaturitySize', 'FurLength', 'Vaccinated',
                             'Dewormed', 'Sterilized', 'Health', 'StateName', 'Breed1Type',
@@ -107,16 +106,17 @@ def load_model():
             st.success("Model downloaded successfully!")
         except requests.exceptions.RequestException as e:
             st.error(f"Error downloading model: {e}")
-            return None
+            return None, None  # Return None for both in case of download error
         except Exception as e:
             st.error(f"An unexpected error occurred during download: {e}")
-            return None
+            return None, None  # Return None for both in case of other download errors
 
     try:
         pipeline_rf, saved_columns = joblib.load(LOCAL_MODEL_PATH)
         return pipeline_rf, saved_columns
     except Exception as e:
         st.error(f"Error loading the model from {LOCAL_MODEL_PATH}: {e}")
+        st.error(traceback.format_exc())  # Print the full traceback for loading errors
         return None, None
 
 # --- Load the model ---
@@ -198,7 +198,6 @@ state_options_list = ['', 'Johor', 'Kedah', 'Kelantan', 'Kuala Lumpur', 'Labuan'
                       'Sabah', 'Sarawak', 'Selangor', 'Terengganu']
 
 # --- App UI ---
-
 st.title("🐶 Pet Adoption Speed Predictor")
 st.write("Predict how quickly a pet may be adopted based on its characteristics and description.")
 
@@ -294,18 +293,21 @@ with col2:
             }
             prediction, suggestions = predict_adoption_speed(pet_info, description, pipeline_rf, saved_columns)
 
-            adoption_labels = {
-                0: ("Estimated to be adopted Same Day", "🟢"),
-                1: ("Estimated to be adopted Within 1 Week", "🟢"),
-                2: ("Estimated to be adopted Within 1 Month", "🟡"),
-                3: ("Estimated to be adopted Within 2-3 Months", "🟡"),
-                4: ("Estimated to have no adoption after 100 Days", "🔴")
-            }
+            if prediction is not None:
+                adoption_labels = {
+                    0: ("Estimated to be adopted Same Day", "🟢"),
+                    1: ("Estimated to be adopted Within 1 Week", "🟢"),
+                    2: ("Estimated to be adopted Within 1 Month", "🟡"),
+                    3: ("Estimated to be adopted Within 2-3 Months", "🟡"),
+                    4: ("Estimated to have no adoption after 100 Days", "🔴")
+                }
 
-            label, emoji = adoption_labels.get(prediction, ("Unknown", "❓"))
-            st.success(f"{emoji} **Predicted Adoption Speed:** {label}")
+                label, emoji = adoption_labels.get(prediction, ("Unknown", "❓"))
+                st.success(f"{emoji} **Predicted Adoption Speed:** {label}")
 
-            if suggestions:
-                st.warning("Here are some suggestions to improve the pet's description:")
-                for suggestion in suggestions:
-                    st.markdown(f"- {suggestion}")
+                if suggestions:
+                    st.warning("Here are some suggestions to improve the pet's description:")
+                    for suggestion in suggestions:
+                        st.markdown(f"- {suggestion}")
+            else:
+                st.error("Prediction failed. Please check the logs for more details.")
