@@ -27,11 +27,13 @@ The goal of this application is to:
 1. Clone the Repository
 
 git clone [https://github.com/your-username/your-repo-name.git](https://github.com/amerchant23/MSDS-498-Capstone.git)
+
 cd your-repo-name
 
 2. Create a Virtual Environment (optional but recommended)
 
 python -m venv venv
+
 source venv/bin/activate  # On Windows use: venv\Scripts\activate
 
 3. Install the Required Packages
@@ -41,6 +43,7 @@ pip install -r requirements.txt
 4. Run the App
 
 streamlit run app.py
+
 Then open the provided local URL (usually http://localhost:8501) in your browser.
 
 ## 💡 How It Works
